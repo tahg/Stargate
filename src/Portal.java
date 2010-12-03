@@ -5,6 +5,7 @@ import java.io.FileWriter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Scanner;
+import java.util.Set;
 import java.util.logging.Level;
 
 /**
@@ -40,6 +41,8 @@ public class Portal {
     private Gate gate;
     private boolean isOpen = false;
     private String owner = "";
+    private HashMap<Block, Integer> exits;
+    private HashMap<Integer, Block> reverseExits;
 
     private Portal(Blox topLeft, int modX, int modZ,
             float rotX, SignPost id, Blox button,
@@ -64,7 +67,6 @@ public class Portal {
         this.register();
         if (verified) {
             this.drawSign(true);
-            this.close();
         }
     }
 
@@ -107,10 +109,11 @@ public class Portal {
         }
 
         player = openFor;
-        
         manipGrace(true, true);
 
         isOpen = true;
+
+        etc.getServer().loadChunk(topLeft.getBlock());
 
         return true;
     }
@@ -147,10 +150,22 @@ public class Portal {
         return fixed;
     }
 
-    public Location getExit() {
-        int height = gate.getLayout().length;
-        int width = gate.getLayout()[0].length;
-        return getLocAt((width / 2) - 0.5, 2 - height, 1.0);
+    public Location getExit(Player player, Portal origin) {
+        Location playerloc = player.getLocation();
+        Block entrance = etc.getServer().getBlockAt((int)Math.floor(playerloc.x), (int)Math.floor(playerloc.y), (int)Math.floor(playerloc.z));
+        HashMap<Block, Integer> originExits = origin.getExits();
+        HashMap<Block, Integer> destExits = this.getExits();
+        int position = (int)(((float)originExits.get(entrance) / originExits.size()) * destExits.size());
+        Block exit = getReverseExits().get(position);
+
+        if (exit == null) {
+            Stargate.log("No position found for " + position);
+            Stargate.log(originExits.get(entrance) + " / " + originExits.size() + " * " + destExits.size());
+            return player.getLocation();
+        } else {
+            float rotation = origin.getRotation() - playerloc.rotX + this.getRotation() + 180;
+            return new Blox(exit).modRelativeLoc(0D, 0D, 1D, rotation, playerloc.rotY, modX, 1, modZ);
+        }
     }
 
     public float getRotation() {
@@ -314,12 +329,39 @@ public class Portal {
             for (RelativeBlockVector vector : border) {
                 frame[i++] = getBlockAt(vector);
             }
+
             for (RelativeBlockVector vector : controls) {
                 frame[i++] = getBlockAt(vector);
             }
         }
 
         return frame;
+    }
+
+    public HashMap<Block, Integer> getExits() {
+        if (exits == null) {
+            exits = new HashMap<Block, Integer>();
+            reverseExits = new HashMap<Integer, Block>();
+            HashMap<RelativeBlockVector, Integer> relativeExits = gate.getExits();
+            Set<RelativeBlockVector> exitBlocks = relativeExits.keySet();
+
+            for (RelativeBlockVector vector : exitBlocks) {
+                Block block = getBlockAt(vector).getBlock();
+                Integer position = relativeExits.get(vector);
+                exits.put(block, position);
+                reverseExits.put(position, block);
+            }
+        }
+
+        return exits;
+    }
+
+    public HashMap<Integer, Block> getReverseExits() {
+        if (reverseExits == null) {
+            getExits();
+        }
+
+        return reverseExits;
     }
 
     @Override
@@ -344,9 +386,6 @@ public class Portal {
     }
 
     public void unregister() {
-
-        close();
-
         lookupNames.remove(getName().toLowerCase());
 
         for (Blox frame : getFrame()) {
@@ -356,17 +395,14 @@ public class Portal {
         lookupBlocks.remove(new Blox(id.getBlock()).toString());
         if (button != null) {
             lookupBlocks.remove(button.toString());
-            button.setData(0);
-            button.setType(0);
         }
 
         for (Blox entrance : getEntrances()) {
             lookupEntrances.remove(entrance.toString());
-            lookupBlocks.remove(entrance.toString());
-            entrance.setType(0);
         }
 
         allPortals.remove(getName());
+        close();
 
         if (id.getBlock().getType() == SIGN) {
             id.setText(0, getName());
@@ -416,13 +452,10 @@ public class Portal {
         }
 
         for (Blox entrance : getEntrances()) {
-            lookupBlocks.put(entrance.toString(), this);
             lookupEntrances.put(entrance.toString(), this);
         }
 
         allPortals.add(getName());
-        
-        close();
     }
 
     @Override
@@ -633,7 +666,7 @@ public class Portal {
                     float rotX = Float.parseFloat(split[5]);
                     Blox topLeft = new Blox(split[6]);
                     Gate gate = (split[7].contains(";")) ? Gate.getGateByName("nethergate.gate") : Gate.getGateByName(split[7]);
-
+                    
                     String fixed = (split.length > 8) ? split[8] : "";
                     String network = (split.length > 9) ? split[9] : Stargate.getDefaultNetwork();
                     String owner = (split.length > 10) ? split[10] : "";

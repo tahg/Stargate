@@ -135,8 +135,7 @@ public class Stargate extends ThreadedPlugin {
                             player.sendMessage(Colors.Blue + teleportMessage);
                         }
 
-                        Location exit = destination.getExit();
-                        exit.rotX = portal.getRotation() - player.getLocation().rotX + destination.getRotation() + 180;
+                        Location exit = destination.getExit(player, portal);
 
                         player.teleportTo(exit);
 
@@ -237,23 +236,20 @@ public class Stargate extends ThreadedPlugin {
             return false;
         }
 
-        public boolean onBlockCreate(Player player, Block blockPlaced, Block blockClicked, int itemInHand) {
+        public boolean onBlockPlace(Player player, Block blockPlaced, Block blockClicked, Item itemInHand) {
             if ((blockClicked.getType() == Portal.SIGN) || (blockClicked.getType() == Portal.BUTTON)) {
                 Portal portal = Portal.getByBlock(blockClicked);
 
-                if (!player.canUseCommand("/stargateuse")) {
-                    return true;
-                }
-
                 if (portal != null) {
-                    if (blockClicked.getType() == Portal.SIGN) {
-                        if ((!portal.isOpen()) && (!portal.isFixed())) {
-                            portal.cycleDestination();
+                    if (player.canUseCommand("/stargateuse")) {
+                        if (blockClicked.getType() == Portal.SIGN) {
+                            if ((!portal.isOpen()) && (!portal.isFixed())) {
+                                portal.cycleDestination();
+                            }
+                        } else if (blockClicked.getType() == Portal.BUTTON) {
+                            onButtonPressed(player, portal);
                         }
-                    } else if (blockClicked.getType() == Portal.BUTTON) {
-                        onButtonPressed(player, portal);
                     }
-
                     return true;
                 }
             }

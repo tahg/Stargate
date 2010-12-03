@@ -27,13 +27,14 @@ public class Gate {
     private RelativeBlockVector[] entrances = new RelativeBlockVector[0];
     private RelativeBlockVector[] border = new RelativeBlockVector[0];
     private RelativeBlockVector[] controls = new RelativeBlockVector[0];
+    private HashMap<RelativeBlockVector, Integer> exits = new HashMap<RelativeBlockVector, Integer>();
     private int portalBlockOpen = 90;
     private int portalBlockClosed = 0;
-    private PaymentMethod costType = PaymentMethod.None;
-    private int costToUse = 0;
-    private int costToActivate = 0;
-    private int costToCreate = 0;
-    private String costDestination = "none";
+    private CostHandler.PaymentMethod costType = CostHandler.PaymentMethod.None;
+    private CostHandler costToUse = new CostHandler();
+    private CostHandler costToActivate = new CostHandler();
+    private CostHandler costToCreate = new CostHandler();
+    private String costDestination = "None";
 
     private Gate(String filename, Integer[][] layout, HashMap<Character, Integer> types) {
         this.filename = filename;
@@ -47,6 +48,10 @@ public class Gate {
         ArrayList<RelativeBlockVector> entrances = new ArrayList<RelativeBlockVector>();
         ArrayList<RelativeBlockVector> border = new ArrayList<RelativeBlockVector>();
         ArrayList<RelativeBlockVector> controls = new ArrayList<RelativeBlockVector>();
+        RelativeBlockVector[] relativeExits = new RelativeBlockVector[layout[0].length];
+        int[] exitDepths = new int[layout[0].length];
+        int bottom = 0;
+        RelativeBlockVector lastExit = null;
 
         for (int y = 0; y < layout.length; y++) {
             for (int x = 0; x < layout[y].length; x++) {
@@ -54,12 +59,32 @@ public class Gate {
 
                 if (id == ENTRANCE) {
                     entrances.add(new RelativeBlockVector(x, y, 0));
+                    exitDepths[x] = y;
+                    bottom = y;
                 } else if (id == CONTROL) {
                     controls.add(new RelativeBlockVector(x, y, 0));
                 } else if (id != ANYTHING) {
                     border.add(new RelativeBlockVector(x, y, 0));
                 }
             }
+        }
+
+        for (int x = 0; x < exitDepths.length; x++) {
+            if (exitDepths[x] >= bottom - 3) {
+                lastExit = new RelativeBlockVector(x, exitDepths[x], 0);
+            }
+
+            relativeExits[x] = lastExit;
+        }
+
+        for (int x = relativeExits.length - 1; x >= 0; x--) {
+            if (relativeExits[x] != null) {
+                lastExit = relativeExits[x];
+            } else {
+                relativeExits[x] = lastExit;
+            }
+
+            if (exitDepths[x] > 0) this.exits.put(relativeExits[x], x);
         }
 
         this.entrances = entrances.toArray(this.entrances);
@@ -76,9 +101,9 @@ public class Gate {
             writeConfig(bw, "portal-open", portalBlockOpen);
             writeConfig(bw, "portal-closed", portalBlockClosed);
             writeConfig(bw, "cost-type", costType.toString());
-            writeConfig(bw, "cost-to-use", costToUse);
-            writeConfig(bw, "cost-to-create", costToCreate);
-            writeConfig(bw, "cost-to-activate", costToActivate);
+            writeConfig(bw, "cost-to-use", costToUse.toString());
+            writeConfig(bw, "cost-to-create", costToCreate.toString());
+            writeConfig(bw, "cost-to-activate", costToActivate.toString());
             writeConfig(bw, "cost-destination", costDestination);
 
             for (Character type : types.keySet()) {
@@ -150,6 +175,10 @@ public class Gate {
         return controls;
     }
 
+    public HashMap<RelativeBlockVector, Integer> getExits() {
+        return exits;
+    }
+
     public int getControlBlock() {
         return types.get('-');
     }
@@ -167,44 +196,13 @@ public class Gate {
     }
 
     public boolean deductCost(CostFor type, Player player) {
-        if (costType == PaymentMethod.Blocks) {
-            Stargate.log(Level.WARNING, "Blocks payment type is NYI");
-        }
-
-        if (costType == PaymentMethod.iConomy) {
-            if (!iData.iExist()) {
-                Stargate.log(Level.WARNING, "iConomy payment selected but iConomy does not exist");
-                return true;
-            }
-
-            int cost = 0;
-
-            switch (type) {
-                case Activating:
-                    cost = costToActivate;
-                    break;
-                case Creating:
-                    cost = costToCreate;
-                    break;
-                case Using:
-                    cost = costToUse;
-                    break;
-            }
-
-            if (cost == 0) {
-                iData icon = new iData();
-                int balance = icon.getBalance(player.getName());
-                String deducted = icon.settings.getString("money-deducted", "");
-                String money = icon.settings.getString("money-name", "");
-                
-                if (balance >= cost) {
-                    icon.setBalance(player.getName(), balance - cost);
-                    if (!deducted.isEmpty()) player.sendMessage(String.format(deducted, cost + money));
-                    return true;
-                } else {
-                    return false;
-                }
-            }
+        switch (type) {
+            case Activating:
+                return costToActivate.deductCost(player);
+            case Creating:
+                return costToCreate.deductCost(player);
+            case Using:
+                return costToUse.deductCost(player);
         }
 
         return true;
@@ -343,15 +341,27 @@ public class Gate {
             String val = config.get("cost-type");
 
             if ((val.equalsIgnoreCase("iconomy")) || (val.equalsIgnoreCase("coins"))) {
-                gate.costType = PaymentMethod.iConomy;
+                gate.costType = CostHandler.PaymentMethod.iConomy;
             } else if ((val.equalsIgnoreCase("blocks")) || (val.equalsIgnoreCase("items"))) {
-                gate.costType = PaymentMethod.Blocks;
+                gate.costType = CostHandler.PaymentMethod.Blocks;
             }
         }
-        gate.costToUse = readConfig(config, gate, file, "cost-to-use", gate.costToUse);
-        gate.costToActivate = readConfig(config, gate, file, "cost-to-activate", gate.costToActivate);
-        gate.costToCreate = readConfig(config, gate, file, "cost-to-create", gate.costToCreate);
+
         gate.costDestination = readConfig(config, gate, file, "cost-destination", gate.costDestination);
+
+        String costToUse = readConfig(config, gate, file, "cost-to-use", gate.costToUse.toString());
+        String costToActivate = readConfig(config, gate, file, "cost-to-activate", gate.costToActivate.toString());
+        String costToCreate = readConfig(config, gate, file, "cost-to-create", gate.costToCreate.toString());
+
+        if (gate.costType == CostHandler.PaymentMethod.Blocks) {
+            gate.costToUse = new CostHandler(costToUse);
+            gate.costToActivate = new CostHandler(costToActivate);
+            gate.costToCreate = new CostHandler(costToCreate);
+        } else if (gate.costType == CostHandler.PaymentMethod.iConomy) {
+            gate.costToUse = new CostHandler(costToUse, gate.costDestination);
+            gate.costToActivate = new CostHandler(costToActivate, gate.costDestination);
+            gate.costToCreate = new CostHandler(costToCreate, gate.costDestination);
+        }
 
         if (gate.getControls().length != 2) {
             Stargate.log(Level.SEVERE, "Could not load Gate " + file.getName() + " - Gates must have exactly 2 control points.");
@@ -445,12 +455,6 @@ public class Gate {
             return name.endsWith(".gate");
         }
     }
-
-    public enum PaymentMethod {
-        iConomy,
-        Blocks,
-        None
-    };
 
     public enum CostFor {
         Using,
