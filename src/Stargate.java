@@ -16,6 +16,7 @@ public class Stargate extends ThreadedPlugin {
     private static String noownersMessage = "You feel a great power, yet feel a lack of belonging here...";
     private static String unselectMessage = "You seem to want to go somewhere, but it's still a secret..."; 
     private static String collisinMessage = "You anticipate a great surge, but it appears it's blocked...";
+    private static String gateHereMessage = "You whack the gate, but it's protected by a strange force...";
     private static String cantAffordToUse = "You check your pocket for spare coin, sadly you find none...";
     private static String cantAffordToNew = "You check your pocket for spare coin, sadly you find none...";
     private static String defaultNetwork = "central";
@@ -43,6 +44,7 @@ public class Stargate extends ThreadedPlugin {
         noownersMessage = config.getString("not-owner-message", noownersMessage);
         unselectMessage = config.getString("not-selected-message", unselectMessage);
         collisinMessage = config.getString("other-side-blocked-message", collisinMessage);
+        gateHereMessage = config.getString("gate-protected-message", gateHereMessage);
         cantAffordToUse = config.getString("cant-afford-use-message", cantAffordToUse);
         cantAffordToNew = config.getString("cant-afford-create-message", cantAffordToNew);
 
@@ -156,20 +158,22 @@ public class Stargate extends ThreadedPlugin {
         }
 
         public boolean onBlockDestroy(Player player, Block block) {
-            if (block.getType() != Portal.SIGN && block.getType() != Portal.OBSIDIAN && block.getType() != Portal.BUTTON) {
-                return false;
-            }
+            //if (block.getType() != Portal.SIGN && block.getType() != Portal.OBSIDIAN && block.getType() != Portal.BUTTON) {
+            //    return false;
+            //}
             Portal gate = Portal.getByBlock(block);
 
             if (gate == null) {
                 return false;
             }
-
+            
             if ((block.getType() == Portal.BUTTON) && (block.getStatus() == 0)) {
                 if (player.canUseCommand("/stargateuse")) {
                     onButtonPressed(player, gate);
                 }
 
+                return true;
+            } else if (block.getType() != Portal.SIGN) {
                 return true;
             } else if (block.getStatus() < 2) {
                 if (!player.canUseCommand("/stargatedestroy")) {

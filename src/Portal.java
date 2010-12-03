@@ -64,6 +64,7 @@ public class Portal {
         this.register();
         if (verified) {
             this.drawSign(true);
+            this.close();
         }
     }
 
@@ -106,6 +107,7 @@ public class Portal {
         }
 
         player = openFor;
+        
         manipGrace(true, true);
 
         isOpen = true;
@@ -146,7 +148,9 @@ public class Portal {
     }
 
     public Location getExit() {
-        return getLocAt(1.5, -3.0, 1.0);
+        int height = gate.getLayout().length;
+        int width = gate.getLayout()[0].length;
+        return getLocAt((width / 2) - 0.5, 2 - height, 1.0);
     }
 
     public float getRotation() {
@@ -303,10 +307,14 @@ public class Portal {
     public Blox[] getFrame() {
         if (frame == null) {
             RelativeBlockVector[] border = gate.getBorder();
-            frame = new Blox[border.length];
+            RelativeBlockVector[] controls = gate.getControls();
+            frame = new Blox[border.length + controls.length];
             int i = 0;
 
             for (RelativeBlockVector vector : border) {
+                frame[i++] = getBlockAt(vector);
+            }
+            for (RelativeBlockVector vector : controls) {
                 frame[i++] = getBlockAt(vector);
             }
         }
@@ -336,6 +344,9 @@ public class Portal {
     }
 
     public void unregister() {
+
+        close();
+
         lookupNames.remove(getName().toLowerCase());
 
         for (Blox frame : getFrame()) {
@@ -345,14 +356,17 @@ public class Portal {
         lookupBlocks.remove(new Blox(id.getBlock()).toString());
         if (button != null) {
             lookupBlocks.remove(button.toString());
+            button.setData(0);
+            button.setType(0);
         }
 
         for (Blox entrance : getEntrances()) {
             lookupEntrances.remove(entrance.toString());
+            lookupBlocks.remove(entrance.toString());
+            entrance.setType(0);
         }
 
         allPortals.remove(getName());
-        close();
 
         if (id.getBlock().getType() == SIGN) {
             id.setText(0, getName());
@@ -402,10 +416,13 @@ public class Portal {
         }
 
         for (Blox entrance : getEntrances()) {
+            lookupBlocks.put(entrance.toString(), this);
             lookupEntrances.put(entrance.toString(), this);
         }
 
         allPortals.add(getName());
+        
+        close();
     }
 
     @Override

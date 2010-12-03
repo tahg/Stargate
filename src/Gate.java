@@ -429,8 +429,10 @@ public class Gate {
     public static Gate[] getGatesByControlBlock(int type) {
         Gate[] result = new Gate[0];
         
-        result = controlBlocks.get(type).toArray(result);
-
+        ArrayList<Gate> gates = controlBlocks.get(type);
+        if(gates != null) {
+            result = gates.toArray(result);
+        }
         return result;
     }
 
